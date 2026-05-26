@@ -8,6 +8,13 @@ on:
     branches:
       - "**"
 
+# 確保套件有權限在 GitHub Actions 頁面建立與寫入測試報告 (Checks)
+permissions:
+  contents: read
+  id-token: write
+  statuses: write
+  checks: write
+
 jobs:
   ci-pipeline:
     runs-on: ubuntu-latest
@@ -34,7 +41,7 @@ jobs:
       - name: Run Tests with JUnit Reporter
         run: |
           mkdir -p reports
-          npm run test -- --reporter=default --reporter=junit --outputFile.junit=reports/vitest-junit.xml
+          npm run test -- --reporter=default --reporter=junit --outputFile=reports/vitest-junit.xml
 
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v4
