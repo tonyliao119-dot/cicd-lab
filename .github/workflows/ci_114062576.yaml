@@ -8,6 +8,13 @@ on:
     branches:
       - "**"
 
+# 🔑 修正點 1：必須加上這個權限區塊，解決 "Failed to create checks" 錯誤
+permissions:
+  contents: read
+  id-token: write
+  statuses: write
+  checks: write
+
 jobs:
   ci-pipeline:
     runs-on: ubuntu-latest
