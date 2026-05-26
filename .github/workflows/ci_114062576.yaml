@@ -3,10 +3,10 @@ name: CI_114062576
 on:
   push:
     branches:
-      - "**"
+      - '**'
   pull_request:
     branches:
-      - "**"
+      - '**'
 
 # 🔑 修正點 1：必須加上這個權限區塊，解決 "Failed to create checks" 錯誤
 permissions:
@@ -26,7 +26,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "22"
+          node-version: '22'
           cache: 'npm' # 自動快取 npm 依賴項目，加速 CI 執行
 
       - name: Install dependencies
