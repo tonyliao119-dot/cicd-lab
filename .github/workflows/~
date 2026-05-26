@@ -1,0 +1,89 @@
+name: CI Pipeline 114062576
+
+on:
+  push:
+    branches: [ "main", "master", "release/*", "feature/*" ]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # 使用 Matrix 跑多個 Node 版本測試，確保相容性
+        node-version: [20, 24]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ====== 作業要求的檢查關卡 (基本要求 20% * 3) ======
+      
+      - name: TypeScript Typecheck
+        run: npx tsc --noEmit
+
+      - name: Prettier Check
+        run: npx prettier --check .
+
+      - name: Run Tests
+        id: vitest-run
+        # 執行 vitest 並導出 junit.xml 報告，遭遇錯誤時先不阻斷以利生成報告
+        run: npx vitest run --reporter=default --reporter=junit --outputFile=junit.xml
+        continue-on-error: true
+
+      # ====== 測試結果視覺化呈現在結果頁面 (基本要求 20%) ======
+      
+      - name: Publish Test Report
+        uses: mikepenz/action-junit-report@v4
+        if: always() # 確保無論成功或失敗，這一步都會執行並解析 junit.xml
+        with:
+          name: Vitest Results Summary (Node ${{ matrix.node-version }})
+          report_paths: '**/junit.xml'
+          detailed_summary: true
+
+      # ====== 嚴格阻斷機制 (基本要求 20%) ======
+      
+      - name: Check Test Status
+        if: steps.vitest-run.outcome == 'failure'
+        run: |
+          echo "核心測試未通過，攔截並回傳失敗狀態！"
+          exit 1
+
+      - name: Compute image tag
+        id: meta
+        run: |
+          BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
+          if [[ "$BRANCH_NAME" == release/* ]]; then
+            VERSION="${BRANCH_NAME#release/}"
+            IMAGE_TAG="release-${VERSION}"
+          else
+            IMAGE_TAG="sha-${GITHUB_SHA::7}"
+          fi
+          echo "branch_name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
+          echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Print image metadata
+        run: |
+          echo "Node version: ${{ matrix.node-version }}"
+          echo "Branch: ${{ steps.meta.outputs.branch_name }}"
+          echo "Image tag: ${{ steps.meta.outputs.image_tag }}"
+
+      - name: Build Docker image
+        # 依照你的 snippet 設定：僅在 Node 24 環境下進行 Docker 封裝，避免重複建置
+        if: ${{ matrix.node-version == 24 }}
+        run: docker build -t my-app:${{ steps.meta.outputs.image_tag }} .
+
+  # ====== 延伸練習：當 CI 通過且屬於 release 分支時，觸發 CD 部署 ======
+  cd:
+    if: ${{ startsWith(github.ref, 'refs/heads/release/') }}
+    needs: ci
+    # 指向專案中正確的 cd 檔案路徑
+    uses: ./.github/workflows/cd.yaml
