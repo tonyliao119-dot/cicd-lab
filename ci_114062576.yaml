@@ -1,0 +1,55 @@
+name: CI Pipeline
+
+# 1. 設定在 push 時自動執行
+on:
+  push:
+    branches: [ "main", "master" ] # 或者是專案預設的主分支
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 步驟一：複製專案程式碼
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # 步驟二：設定 Node.js 環境
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20' # 依專案需求調整版本
+        cache: 'npm'
+
+    # 步驟三：安裝相依套件
+    - name: Install dependencies
+      run: npm ci
+
+    # 步驟四：TypeScript 型別檢查 (Typecheck)
+    - name: TypeScript Typecheck
+      run: npx tsc --noEmit
+
+    # 步驟五：Prettier 格式檢查
+    - name: Prettier Check
+      run: npx prettier --check .
+
+    # 步驟六：執行測試並產出報告 (以 Jest 為例)
+    # 加上 || true 或對應設定，確保測試失敗時仍能執行後續「收集報告」的步驟，但最終要讓 Pipeline 失敗
+    - name: Run Tests
+      run: npm run test -- --coverage
+      continue-on-error: true # 讓測試失敗時不會直接中斷，好讓下一步能處理報告
+
+    # 步驟七：將測試結果顯示於 GitHub Actions 結果頁面
+    # 這裡使用市面上常見的 action 顯示測試報告（例如 Test Reporter 或 JUnit Report）
+    - name: Test Report
+      uses: dorny/test-reporter@v1
+      if: always() # 確保無論前面的步驟成功或失敗，都會執行這一步
+      with:
+        name: Jest Tests Result
+        path: '**/junit.xml' # 需配合專案測試工具產出的報告格式，或是使用其他合適的 action
+        reporter: jest-junit
+
+    # 步驟八：阻斷機制（如果測試失敗，確保 Pipeline 最終顯示為失敗）
+    - name: Check test status
+      if: steps.Run-Tests.outcome == 'failure'
+      run: exit 1
