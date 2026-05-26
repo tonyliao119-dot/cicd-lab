@@ -1,55 +1,61 @@
 name: CI Pipeline
 
-# 1. 設定在 push 時自動執行
+# 1. 當 push 到 main 或 master 分支時自動觸發
 on:
   push:
-    branches: [ "main", "master" ] # 或者是專案預設的主分支
+    branches: [ "main", "master" ]
 
 jobs:
-  build-and-test:
+  continuous-integration:
     runs-on: ubuntu-latest
 
     steps:
-    # 步驟一：複製專案程式碼
-    - name: Checkout code
+    # 步驟一：複製專案程式碼到虛擬機中
+    - name: Checkout repository
       uses: actions/checkout@v4
 
-    # 步驟二：設定 Node.js 環境
+    # 步驟二：安裝 Node.js 環境
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20' # 依專案需求調整版本
-        cache: 'npm'
+        node-version: '20'
+        cache: 'npm' # 自動快取 node_modules 加快下次打包速度
 
-    # 步驟三：安裝相依套件
+    # 步驟三：安裝專案所需的相依套件
     - name: Install dependencies
       run: npm ci
 
-    # 步驟四：TypeScript 型別檢查 (Typecheck)
+    # 步驟四：TypeScript 型別檢查 (Typecheck) (配分 20%)
+    # --noEmit 代表只檢查型別，不實際編譯出 js 檔案
     - name: TypeScript Typecheck
       run: npx tsc --noEmit
 
-    # 步驟五：Prettier 格式檢查
+    # 步驟五：Prettier 格式檢查 (配分 20%)
+    # --check 會檢查檔案是否符合排版規範，若有檔案沒對齊會回傳錯誤代碼，讓 Pipeline 失敗 (配分 20%)
     - name: Prettier Check
       run: npx prettier --check .
 
-    # 步驟六：執行測試並產出報告 (以 Jest 為例)
-    # 加上 || true 或對應設定，確保測試失敗時仍能執行後續「收集報告」的步驟，但最終要讓 Pipeline 失敗
+    # 步驟六：執行測試 (Test) (配分 20%)
+    # 使用 --json --outputFile 或是產出 junit 報告，這裡我們先讓它正常跑測試
+    # 為了讓測試失敗時也能把報告生出來，我們加上 continue-on-error: true
     - name: Run Tests
-      run: npm run test -- --coverage
-      continue-on-error: true # 讓測試失敗時不會直接中斷，好讓下一步能處理報告
+      id: run-tests
+      run: npm run test -- --watchAll=false
+      continue-on-error: true
 
-    # 步驟七：將測試結果顯示於 GitHub Actions 結果頁面
-    # 這裡使用市面上常見的 action 顯示測試報告（例如 Test Reporter 或 JUnit Report）
-    - name: Test Report
-      uses: dorny/test-reporter@v1
-      if: always() # 確保無論前面的步驟成功或失敗，都會執行這一步
+    # 步驟七：將測試結果顯示於 GitHub Actions 結果頁面 (配分 20%)
+    - name: Publish Test Report
+      uses: mikepenz/action-junit-report@v4
+      if: always() # 確保不論前面的測試成功或失敗，此步驟都會執行並產生報告
       with:
-        name: Jest Tests Result
-        path: '**/junit.xml' # 需配合專案測試工具產出的報告格式，或是使用其他合適的 action
-        reporter: jest-junit
+        name: Vitest Results # 顯示在 GitHub Actions 頁面上的報告名稱
+        report_paths: '**/junit.xml' # 自動去搜尋專案中生成的 junit.xml 檔案
+        detailed_summary: true # 讓詳細的測試案例數據直接呈現在畫面上
 
-    # 步驟八：阻斷機制（如果測試失敗，確保 Pipeline 最終顯示為失敗）
-    - name: Check test status
-      if: steps.Run-Tests.outcome == 'failure'
-      run: exit 1
+    # 步驟八：嚴格阻斷機制 (配分 20%)
+    # 如果剛剛的測試步驟其實是失敗的 (failure)，就在這裡強制將整個 Pipeline 設為失敗
+    - name: Check Test Status
+      if: steps.run-tests.outcome == 'failure'
+      run: |
+        echo "測試未通過，攔截並回傳失敗！"
+        exit 1
