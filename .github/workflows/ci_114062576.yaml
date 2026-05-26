@@ -1,0 +1,57 @@
+name: CI Pipeline 114062576
+
+# 1. 確保在 push 時自動執行
+on:
+  push:
+    branches: [ "main", "master", "feature/*" ] # 包含主分支與實驗分支
+
+jobs:
+  code-quality-check:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 步驟一：拉取程式碼
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # 步驟二：設定 Node.js 環境
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    # 步驟三：使用 npm ci 安裝專案依賴
+    - name: Install dependencies
+      run: npm ci
+
+    # 步驟四：TypeScript 型別檢查 (Typecheck) - 佔分 20%
+    - name: TypeScript Typecheck
+      run: npx tsc --noEmit
+
+    # 步驟五：Prettier 格式檢查 - 佔分 20%
+    - name: Prettier Check
+      run: npx prettier --check .
+
+    # 步驟六：執行測試 (Test) - 佔分 20%
+    # 透過 continue-on-error 確保測試失敗時也能執行步驟七產生報告，並在步驟八嚴格阻斷
+    - name: Run Tests
+      id: vitest-run
+      run: npx vitest run --reporter=default --reporter=junit --outputFile=junit.xml
+      continue-on-error: true
+
+    # 步驟七：將測試結果顯示於 GitHub Actions 結果頁面 - 佔分 20%
+    - name: Publish Test Report
+      uses: mikepenz/action-junit-report@v4
+      if: always() # 確保無論前面的步驟成功或失敗，都會產出報告
+      with:
+        name: Vitest Results Summary
+        report_paths: '**/junit.xml'
+        detailed_summary: true
+
+    # 步驟八：阻斷機制 - 任一檢查失敗時，Pipeline 應顯示失敗 - 佔分 20%
+    - name: Check Test Status
+      if: steps.vitest-run.outcome == 'failure'
+      run: |
+        echo "核心測試未通過，攔截並回傳失敗狀態！"
+        exit 1
